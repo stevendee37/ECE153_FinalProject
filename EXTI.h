@@ -4,6 +4,5 @@
 #include "stm32l476xx.h"
 
 void EXTI_Init(void);
-void EXTI15_10_IRQHandler(void);
 
 #endif

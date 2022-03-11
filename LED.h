@@ -3,10 +3,9 @@
 
 #include "stm32l476xx.h"
 
-void LED_Init(void);
+void MAX7219_1Unit(uint8_t reg_addr, uint8_t reg_data);
 
-void Green_LED_Off(void);
-void Green_LED_On(void);
-void Green_LED_Toggle(void);
+void Draw (uint8_t *LED_matrix);
+void setup(void);
 
 #endif

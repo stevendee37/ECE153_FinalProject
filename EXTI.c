@@ -8,6 +8,9 @@
  */
 
 #include "EXTI.h"
+#include "LED.h"
+
+
 
 void EXTI_Init(void) {
 	// Initialize User Button
@@ -40,8 +43,3 @@ void EXTI_Init(void) {
 // [TODO] Write Interrupt Handlers (look in startup_stm32l476xx.s to find the 
 // interrupt handler names that you should use)
 
-void EXTI15_10_IRQHandler(void) {
-	// Clear interrupt pending bit
-	EXTI->PR1 |= EXTI_PR1_PIF13;
-	// Define behavior that occurs when interrupt occurs
-}
