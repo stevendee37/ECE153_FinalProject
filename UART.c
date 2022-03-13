@@ -9,7 +9,7 @@ void UART1_Init(void) {
 	RCC->CCIPR &= ~RCC_CCIPR_USART1SEL;
 	RCC->CCIPR |= RCC_CCIPR_USART1SEL_0;
 }
-
+/*
 void UART2_Init(void) {
 	// [TODO]
 	
@@ -20,7 +20,7 @@ void UART2_Init(void) {
 	RCC->CCIPR &= ~RCC_CCIPR_USART2SEL;
 	RCC->CCIPR |= RCC_CCIPR_USART2SEL_0;
 }
-
+*/
 void UART1_GPIO_Init(void) {
 	// [TODO]
 	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOBEN;
@@ -48,7 +48,7 @@ void UART1_GPIO_Init(void) {
 	GPIOB->PUPDR |= GPIO_PUPDR_PUPD6_0;
 	GPIOB->PUPDR |= GPIO_PUPDR_PUPD7_0;
 }
-
+/*
 void UART2_GPIO_Init(void) {
 	// [TODO]
 	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
@@ -79,7 +79,7 @@ void UART2_GPIO_Init(void) {
 	GPIOA->PUPDR |= GPIO_PUPDR_PUPD2_0;
 	GPIOA->PUPDR |= GPIO_PUPDR_PUPD3_0;
 }
-
+*/
 void USART_Init(USART_TypeDef* USARTx) {
 	// [TODO]
 	
