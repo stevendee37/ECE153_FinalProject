@@ -1,14 +1,10 @@
 #include "SPI.h"
 
-// MOSI and NSS
-// PA4 PA5 PA7
-
 // Note: When the data frame size is 8 bit, "SPIx->DR = byte_data;" works incorrectly. 
 // It mistakenly send two bytes out because SPIx->DR has 16 bits. To solve the program,
 // we should use "*((volatile uint8_t*)&SPIx->DR) = byte_data";
 
 void SPI1_GPIO_Init(void) {
-	// TODO: initialize SPI1 GPIO pins
 	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
 	
 	// Configure pins to operate in alternate funciton mode
@@ -43,8 +39,6 @@ void SPI1_GPIO_Init(void) {
 }
 
 void SPI1_Init(void){
-	// TODO: initialize SPI1 peripheral
-	
 	// Enable SPI1 Clock
 	RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
 	
@@ -96,7 +90,6 @@ void SPI1_Init(void){
 }
  
 void SPI_SendByte(uint16_t write_data) {
-	// TODO: perform SPI transfer
 	while((SPI1->SR & SPI_SR_TXE) == 0);
 	
 	*((volatile uint16_t*)&SPI1->DR) = write_data;

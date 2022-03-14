@@ -8,8 +8,10 @@
 #include "SysClock.h"
 #include "UART.h"
 #include "SPI.h"
-#include "EXTI.h"
+#include "POLL.h"
 #include "LED.h"
+#include "LED_configs.h"
+#include "ultrasonic.h"
 
 #include <string.h>
 #include <stdio.h> 
@@ -21,124 +23,18 @@ uint32_t volatile lastValue = 0;
 uint32_t volatile overflowCount = 0;
 uint32_t volatile timeInterval = 0;
 uint32_t volatile input = 0;
-uint32_t volatile distance;
+uint32_t volatile throttlePDL_dist;
 
 uint32_t volatile currentValue_1 = 0;
 uint32_t volatile lastValue_1 = 0;
 uint32_t volatile overflowCount_1 = 0;
 uint32_t volatile timeInterval_1 = 0;
 uint32_t volatile input_1 = 0;
-uint32_t volatile distance_1;
-
-
+uint32_t volatile brakePDL_dist;
 
 uint32_t volatile gear = 1;
 uint32_t volatile RPM = 5000;
-
-void Input_Capture_Setup() {
-	// [TODO]
-	// Set up PB8
-		// Enable clock for GPIO Port B
-	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOBEN;
-	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
-	
-		// Configure PB8 to be used as alternative function
-	GPIOB->MODER &= ~GPIO_MODER_MODE8;
-	GPIOB->MODER |= GPIO_MODER_MODE8_1;
-	
-	GPIOA->MODER &= ~GPIO_MODER_MODE0;
-	GPIOA->MODER |= GPIO_MODER_MODE0_1;
-	
-	GPIOB->AFR[1] &= ~GPIO_AFRH_AFSEL8;
-	GPIOB->AFR[1] |= GPIO_AFRH_AFSEL8_1;
-	
-	GPIOA->AFR[0] &= ~GPIO_AFRL_AFSEL0;
-	GPIOA->AFR[0] |= GPIO_AFRL_AFSEL0_0;
-	
-	// Set PB8 to no pull-up, no pull-down
-	GPIOB->PUPDR &= ~GPIO_PUPDR_PUPD8;
-	
-	GPIOA->PUPDR &= ~GPIO_PUPDR_PUPD0;
-	
-	// Enable Timer 4 in RCC_APB2ENRx
-	RCC->APB1ENR1 |= RCC_APB1ENR1_TIM4EN;
-	
-	RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
-	
-	// Set prescaler to 79
-	TIM4->PSC &= ~TIM_PSC_PSC;
-	TIM4->PSC |= 0x4F;
-	
-	TIM2->PSC &= ~TIM_PSC_PSC;
-	TIM2->PSC |= 0x4F;
-	
-	// Enable auto reload preload in control register
-	TIM4->CR1 |= TIM_CR1_ARPE;
-	
-	TIM2->CR1 |= TIM_CR1_ARPE;
-	
-	// Set auto reload value to maximum value
-	TIM4->ARR |= TIM_ARR_ARR;
-	
-	TIM2->ARR |= TIM_ARR_ARR;
-	
-	// Set input capture mode bits such that input capture mode bits
-	// is mapped to timer input 1 in capture/compare mode register
-	TIM4->CCMR2 &= ~TIM_CCMR2_CC3S;
-	TIM4->CCMR2 |= TIM_CCMR2_CC3S_0;
-	
-	TIM2->CCMR1 &= ~TIM_CCMR1_CC1S;
-	TIM2->CCMR1 |= TIM_CCMR1_CC1S_0;
-	
-	// Set bits to capture both rising/falling edges
-	TIM4->CCER |= TIM_CCER_CC3P;
-	TIM4->CCER |= TIM_CCER_CC3NP;
-	
-	TIM2->CCER |= TIM_CCER_CC1P;
-	TIM2->CCER |= TIM_CCER_CC1NP;
-	
-	// Enable Capturing
-	TIM4->CCER |= TIM_CCER_CC3E;
-	
-	TIM2->CCER |= TIM_CCER_CC1E;
-	
-	// Enable interrupt, DMA requests, and update interrupt 
-	// in DMA/Interrupt enable register
-	TIM4->DIER |= TIM_DIER_CC3IE;
-	TIM4->DIER |= TIM_DIER_CC3DE;
-	TIM4->DIER |= TIM_DIER_UIE;
-	
-	TIM2->DIER |= TIM_DIER_CC1IE;
-	TIM2->DIER |= TIM_DIER_CC1DE;
-	TIM2->DIER |= TIM_DIER_UIE;
-	
-	// Enable update generation in the event generation register
-	TIM4->EGR |= TIM_EGR_UG;
-	
-	TIM2->EGR |= TIM_EGR_UG;
-	
-	// Clear the update interupt flag
-	TIM4->SR &= ~TIM_SR_UIF;
-	
-	TIM2->SR &= ~TIM_SR_UIF;
-	
-	// Set direction of the counter (upcounter)
-	TIM4->CR1 &= ~TIM_CR1_DIR;
-	
-	TIM2->CR1 &= ~TIM_CR1_DIR;
-	
-	// Enable counter
-	TIM4->CR1 |= TIM_CR1_CEN;
-	
-	TIM2->CR1 |= TIM_CR1_CEN;
-	
-	// Enable interrupt TIM4_IRQn, set priority to 2
-	NVIC_EnableIRQ(TIM4_IRQn);
-	NVIC_SetPriority(TIM4_IRQn, 2);
-	
-	NVIC_EnableIRQ(TIM2_IRQn);
-	NVIC_SetPriority(TIM2_IRQn, 2);
-}
+uint32_t volatile MAX_RPM = 12000;
 
 void TIM4_IRQHandler(void) {
 	input = (GPIOB->IDR & GPIO_IDR_ID8) == GPIO_IDR_ID8;
@@ -202,123 +98,6 @@ void TIM2_IRQHandler(void) {
 	}
 }
 
-
-void Trigger_Setup() {
-	// [TODO]
-	
-	// Set up PA9
-		// Enable clock for GPIO Port A
-	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
-	
-		// Configure PA9 to Alternative Function Mode
-	GPIOA->MODER &= ~GPIO_MODER_MODE9;
-	GPIOA->MODER |= GPIO_MODER_MODE9_1;
-	
-	GPIOA->MODER &= ~GPIO_MODER_MODE2;
-	GPIOA->MODER |= GPIO_MODER_MODE2_1;
-	
-		// Configure and Select the Alternative Function for PA9
-	GPIOA->AFR[1] &= ~GPIO_AFRH_AFSEL9;
-	GPIOA->AFR[1] |= GPIO_AFRH_AFSEL9_0;
-	
-	GPIOA->AFR[0] &= ~GPIO_AFRL_AFSEL2;
-	GPIOA->AFR[0] |= GPIO_AFRL_AFSEL2_1;
-	
-		// Configure PA9 to No Pull-Up, No Pull-Down
-	GPIOA->PUPDR &= ~GPIO_PUPDR_PUPD9;
-	
-	GPIOA->PUPDR &= ~GPIO_PUPDR_PUPD2;
-	
-		// Set the output type of PA9 to push-pull
-	GPIOA->OTYPER &= ~GPIO_OTYPER_OT9;
-	
-	GPIOA->OTYPER &= ~GPIO_OTYPER_OT2;
-	
-		// Configure PA9 to Very High Output Speed
-	GPIOA->OSPEEDR  &= ~GPIO_OSPEEDR_OSPEED9;
-	GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEED9;
-	
-	GPIOA->OSPEEDR  &= ~GPIO_OSPEEDR_OSPEED2;
-	GPIOA->OSPEEDR |= GPIO_OSPEEDR_OSPEED2;
-	
-	// Enable Timer 1 in RCC_APB2ENR
-	RCC->APB2ENR |= RCC_APB2ENR_TIM1EN;
-	
-	RCC->APB1ENR1 |= RCC_APB1ENR1_TIM5EN;
-	
-	// Set prescaler to 15
-	TIM1->PSC &= ~TIM_PSC_PSC;
-	TIM1->PSC |= 0x4F;
-	
-	TIM5->PSC &= ~TIM_PSC_PSC;
-	TIM5->PSC |= 0x4F;
-	
-	// Enable Auto Reload Preload
-	TIM1->CR1 |= TIM_CR1_ARPE;
-	
-	TIM5->CR1 |= TIM_CR1_ARPE;
-	
-	// Set auto reload value to its maximal value
-	TIM1->ARR |= TIM_ARR_ARR;
-	
-	TIM5->ARR |= TIM_ARR_ARR;
-	
-	// Set CCR value that will trigger the sensor
-	TIM1->CCR2 = 0xA; // 26.4.14
-	
-	TIM5->CCR2 = 0xA; // 26.4.14
-	
-	// Set the output compare mode such that timer operates in
-	// PWM mode 1
-	TIM1->CCMR1 &= ~TIM_CCMR1_OC2M;
-	TIM1->CCMR1 |= TIM_CCMR1_OC2M_1;
-	TIM1->CCMR1 |= TIM_CCMR1_OC2M_2;
-	
-	TIM5->CCMR2 &= ~TIM_CCMR2_OC3M;
-	TIM5->CCMR2 |= TIM_CCMR2_OC3M_1;
-	TIM5->CCMR2 |= TIM_CCMR2_OC3M_2;
-	
-	// Enable output compare preload
-	TIM1->CCMR1 |= TIM_CCMR1_OC2PE;
-	
-	TIM5->CCMR2 |= TIM_CCMR2_OC3PE;
-	
-	// Enable output in capture/compare enable register
-	TIM1->CCER |= TIM_CCER_CC2E;
-	
-	TIM5->CCER |= TIM_CCER_CC3E;
-	
-	// Set bits for main output enable in break and dead-time register
-	TIM1->BDTR |= ( TIM_BDTR_MOE | TIM_BDTR_OSSR );
-	
-	TIM5->BDTR |= ( TIM_BDTR_MOE | TIM_BDTR_OSSR );
-	
-	// Enable update generation in the event generation register
-	TIM1->EGR |= TIM_EGR_UG;
-	
-	TIM5->EGR |= TIM_EGR_UG;
-	
-	// Enable update interrupt
-	TIM1->DIER |= TIM_DIER_UIE;
-	
-	TIM5->DIER |= TIM_DIER_UIE;
-	
-	// Clear the update interrupt flag
-	TIM1->SR &= ~TIM_SR_UIF;
-	
-	TIM5->SR &= ~TIM_SR_UIF;
-	
-	// Set direction of counter (upcounter)
-	TIM1->CR1 &= ~TIM_CR1_DIR;
-	
-	TIM5->CR1 &= ~TIM_CR1_DIR;
-	
-	// Enable counter
-	TIM1->CR1 |= TIM_CR1_CEN;
-	
-	TIM5->CR1 |= TIM_CR1_CEN;
-}
-
 //////////// USART ///////////
 
 void Init_USARTx(int x) {
@@ -331,643 +110,181 @@ void Init_USARTx(int x) {
 	}
 }
 
-/////////// GEAR 1 
-uint8_t matrixData_8X8_1_0[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00000010,
- 0b00111110,
- 0b00010010,
- 0b00000000,
- 0b00000000,
- 0b00000000
-
-};
-
-uint8_t matrixData_8X8_1_1[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00000010,
- 0b00111110,
- 0b00010010,
- 0b00000000,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_1_2[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00000010,
- 0b00111110,
- 0b10010010,
- 0b10000000,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_1_3[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b10000010,
- 0b10111110,
- 0b10010010,
- 0b10000000,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_1_4[8] = { // Matrix pattern
-
- 0b10000000,// row 1, top to bottom
- 0b10000000,
- 0b10000010,
- 0b10111110,
- 0b10010010,
- 0b10000000,
- 0b10000000,
- 0b10000000
-
-};
-
-////////// GEAR 2
-uint8_t matrixData_8X8_2_0[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111010,
- 0b00101010,
- 0b00101010,
- 0b00101110,
- 0b00000000,
- 0b00000000
-
-};
-
-uint8_t matrixData_8X8_2_1[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111010,
- 0b00101010,
- 0b00101010,
- 0b00101110,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_2_2[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111010,
- 0b00101010,
- 0b10101010,
- 0b10101110,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_2_3[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b10111010,
- 0b10101010,
- 0b10101010,
- 0b10101110,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_2_4[8] = { // Matrix pattern
-
- 0b10000000,// row 1, top to bottom
- 0b10000000,
- 0b10111010,
- 0b10101010,
- 0b10101010,
- 0b10101110,
- 0b10000000,
- 0b10000000
-
-};
-
-///////// GEAR 3
-uint8_t matrixData_8X8_3_0[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111110,
- 0b00101010,
- 0b00101010,
- 0b00101010,
- 0b00000000,
- 0b00000000
-
-};
-
-uint8_t matrixData_8X8_3_1[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111110,
- 0b00101010,
- 0b00101010,
- 0b00101010,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_3_2[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111110,
- 0b00101010,
- 0b10101010,
- 0b10101010,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_3_3[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b10111110,
- 0b10101010,
- 0b10101010,
- 0b10101010,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_3_4[8] = { // Matrix pattern
-
- 0b10000000,// row 1, top to bottom
- 0b10000000,
- 0b10111110,
- 0b10101010,
- 0b10101010,
- 0b10101010,
- 0b10000000,
- 0b10000000
-
-};
-
-/////////// GEAR 4
-uint8_t matrixData_8X8_4_0[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111110,
- 0b00001000,
- 0b00001000,
- 0b00111000,
- 0b00000000,
- 0b00000000
-
-};
-
-uint8_t matrixData_8X8_4_1[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111110,
- 0b00001000,
- 0b00001000,
- 0b00111000,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_4_2[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111110,
- 0b00001000,
- 0b10001000,
- 0b10111000,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_4_3[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b10111110,
- 0b10001000,
- 0b10001000,
- 0b10111000,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_4_4[8] = { // Matrix pattern
-
- 0b10000000,// row 1, top to bottom
- 0b10000000,
- 0b10111110,
- 0b10001000,
- 0b10001000,
- 0b10111000,
- 0b10000000,
- 0b10000000
-
-};
-
-///////// GEAR 5
-uint8_t matrixData_8X8_5_0[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00101110,
- 0b00101010,
- 0b00101010,
- 0b00111010,
- 0b00000000,
- 0b00000000
-
-};
-
-uint8_t matrixData_8X8_5_1[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00101110,
- 0b00101010,
- 0b00101010,
- 0b00111010,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_5_2[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00101110,
- 0b00101010,
- 0b10101010,
- 0b10111010,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_5_3[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b10101110,
- 0b10101010,
- 0b10101010,
- 0b10111010,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_5_4[8] = { // Matrix pattern
-
- 0b10000000,// row 1, top to bottom
- 0b10000000,
- 0b10101110,
- 0b10101010,
- 0b10101010,
- 0b10111010,
- 0b10000000,
- 0b10000000
-
-};
-
-///////// GEAR 6
-uint8_t matrixData_8X8_6_0[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00101110,
- 0b00101010,
- 0b00101010,
- 0b00111110,
- 0b00000000,
- 0b00000000
-
-};
-
-uint8_t matrixData_8X8_6_1[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00101110,
- 0b00101010,
- 0b00101010,
- 0b00111110,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_6_2[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00101110,
- 0b00101010,
- 0b10101010,
- 0b10111110,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_6_3[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b10101110,
- 0b10101010,
- 0b10101010,
- 0b10111110,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_6_4[8] = { // Matrix pattern
-
- 0b10000000,// row 1, top to bottom
- 0b10000000,
- 0b10101110,
- 0b10101010,
- 0b10101010,
- 0b10111110,
- 0b10000000,
- 0b10000000
-
-};
-
-////////// GEAR 7
-uint8_t matrixData_8X8_7_0[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00110000,
- 0b00101000,
- 0b00100100,
- 0b00100010,
- 0b00000000,
- 0b00000000
-
-};
-
-uint8_t matrixData_8X8_7_1[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00110000,
- 0b00101000,
- 0b00100100,
- 0b00100010,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_7_2[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00110000,
- 0b00101000,
- 0b10100100,
- 0b10100010,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_7_3[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b10110000,
- 0b10101000,
- 0b10100100,
- 0b10100010,
- 0b10000000,
- 0b10000000
-
-};
-
-uint8_t matrixData_8X8_7_4[8] = { // Matrix pattern
-
- 0b10000000,// row 1, top to bottom
- 0b10000000,
- 0b10110000,
- 0b10101000,
- 0b10100100,
- 0b10100010,
- 0b10000000,
- 0b10000000
-
-};
-
-////////// GEAR 8
-uint8_t matrixData_8X8_8_0[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111110,
- 0b00101010,
- 0b00101010,
- 0b00111110,
- 0b00000000,
- 0b00000000
-};
-
-uint8_t matrixData_8X8_8_1[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111110,
- 0b00101010,
- 0b00101010,
- 0b00111110,
- 0b10000000,
- 0b10000000
-};
-
-uint8_t matrixData_8X8_8_2[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b00111110,
- 0b00101010,
- 0b10101010,
- 0b10111110,
- 0b10000000,
- 0b10000000
-};
-
-uint8_t matrixData_8X8_8_3[8] = { // Matrix pattern
-
- 0b00000000,// row 1, top to bottom
- 0b00000000,
- 0b10111110,
- 0b10101010,
- 0b10101010,
- 0b10111110,
- 0b10000000,
- 0b10000000
-};
-
-uint8_t matrixData_8X8_8_4[8] = { // Matrix pattern
-
- 0b10000000,// row 1, top to bottom
- 0b10000000,
- 0b10111110,
- 0b10101010,
- 0b10101010,
- 0b10111110,
- 0b10000000,
- 0b10000000
-};
-
-void EXTI15_10_IRQHandler(void) {
-	// Clear interrupt pending bit
-	EXTI->PR1 |= EXTI_PR1_PIF13;
-	// Define behavior that occurs when interrupt occurs
-	if(gear < 8){
-		gear++;
-		RPM = 5000 + 50*(gear - 1);
-	}
-}
-
 int main(void) {	
-	System_Clock_Init(); // Switch System Clock = 80 MHz
+	System_Clock_Init(); // System Clock = 80 MHz
 	
-	// Input Capture Setup
+	// Initialize Ultrasonic Sensor
 	Input_Capture_Setup();
 	// Trigger Setup
 	Trigger_Setup();
 	
-	
-	// Initialize UART -- change the argument depending on the part you are working on
+	// Initialize UART
 	Init_USARTx(1);
 	
+	// Initialize SPI
 	SPI1_Init();
 	SPI1_GPIO_Init();
 	setup();
 	
-	EXTI_Init();
+	// Initialize Polling
+	POLL_Init();
+	int i = 0;
+	int previousInput = 1;
 	
-	// Draw(matrixData_8X8_8);
+	// Pedal distances
+	int DISTANCE_RESTING = 12;
+	int DISTANCE_QUARTER = 10;
+	int DISTANCE_HALF = 8;
+	int DISTANCE_3QUARTERS = 6;
+	int DISTANCE_FULL = 4;
 	
 	while(1) {
-		// [TODO] Store your measurements on Stack
 		if((timeInterval < 150) || (timeInterval > 25000)){
-			distance = 0;
-			distance_1 = 0;
+			throttlePDL_dist = 0;
+			brakePDL_dist = 0;
 		}
 		else{
-			distance = timeInterval/58;
-			distance_1 = timeInterval_1/58;
-			if(distance < 2){
-				RPM += 250;
-				if(RPM > 12000){
-					RPM = 12000;
+			////////// POLLING for input //////////
+			uint32_t mask = 1UL<<13;
+			uint32_t input = (GPIOC->IDR & mask) == mask;
+			if((previousInput == 1) && (input == 0)){
+				if(i == 1){
+					i = 0;
+				}
+				else{
+					i = 1;
 				}
 			}
-			else if(distance >=2 && distance < 5){
-				RPM += 100;
-				if(RPM > 12000){
-					RPM = 12000;
+			if(i == 0){
+				// Do Nothing
+			}
+			else if (i == 1){
+				if(throttlePDL_dist <= DISTANCE_RESTING){
+					gear++;
+					if(RPM > 7000){
+						RPM = RPM - 2000;
+						}
+					else{
+						RPM = 5000;
+					}
+				i = 0;
 				}
 			}
-			else if(distance >=5 && distance < 8){
-				RPM += 50;
-				if(RPM > 11000){
-					RPM = 11000;
+			previousInput = input;
+			
+			////////// Distance calculations //////////
+			throttlePDL_dist = timeInterval/58;
+			brakePDL_dist = timeInterval_1/58;
+			
+			////////// RPM behavior based on pedal input //////////
+			if(brakePDL_dist >= DISTANCE_RESTING){
+				if(throttlePDL_dist < DISTANCE_FULL){
+					RPM += 300;
+					if(RPM > MAX_RPM){
+						RPM = MAX_RPM;
+					}
 				}
-			}
-			else if(distance >=8 && distance < 11){
-				RPM += 10;
-				if(RPM > 10000){
-					RPM = 10000;
+				else if(throttlePDL_dist >= DISTANCE_FULL && throttlePDL_dist < DISTANCE_3QUARTERS){
+					RPM += 100;
+					if(RPM > 11125){
+						RPM = 11125;
+					}
 				}
-			}
-			else if(distance >=11){
-				RPM -= 10;
-				if(RPM < 5000){
-					RPM = 5000;
-					if(gear > 1){
-						gear--;
-						RPM = 12000;
-					}		
+				else if(throttlePDL_dist >= DISTANCE_3QUARTERS && throttlePDL_dist < DISTANCE_HALF){
+					RPM += 50;
+					if(RPM > 10250){
+						RPM = 10250;
+					}
 				}
-			}
-			if(distance_1 < 2){
-				RPM -= RPM/5;
-				if(RPM < 5000){
-					RPM = 5000;
-					if(gear > 1){
-						gear--;
-						RPM = 12000;
+				else if(throttlePDL_dist >= DISTANCE_HALF && throttlePDL_dist < DISTANCE_QUARTER){
+					RPM += 10;
+					if(RPM > 9375){
+						RPM = 9375;
+					}
+				}
+				else if(throttlePDL_dist >= DISTANCE_QUARTER && throttlePDL_dist < DISTANCE_RESTING){
+					RPM += 10;
+					if(RPM > 8500){
+						RPM = 8500;
+					}
+				}
+				else if(throttlePDL_dist >= DISTANCE_RESTING){
+					RPM -= 10;
+					if(RPM < 5000){
+						if(gear > 1){
+							RPM = 10000;
+							gear--;
+						}
+						else{
+							RPM = 5000;
+						}	
 					}
 				}
 			}
-			else if(distance_1 >=2 && distance_1 < 5){
-				RPM -= RPM/15;
+			if(brakePDL_dist < DISTANCE_FULL){
+				RPM -= RPM/35;
 				if(RPM < 5000){
-					RPM = 5000;
 					if(gear > 1){
+						RPM = 10000;
 						gear--;
-						RPM = 12000;
+						
+					}
+					else{
+						RPM = 5000;
 					}
 				}
 			}
-			else if(distance_1 >=5 && distance_1 < 8){
-				RPM -= RPM/25;
+			else if(brakePDL_dist >= DISTANCE_FULL && brakePDL_dist < DISTANCE_3QUARTERS){
+				RPM -= RPM/45;
 				if(RPM < 5000){
-					RPM = 5000;
 					if(gear > 1){
+						RPM = 10000;
 						gear--;
-						RPM = 12000;
+						
+					}
+					else{
+						RPM = 5000;
 					}
 				}
 			}
-			else if(distance_1 >=8 && distance_1 < 11){
+			else if(brakePDL_dist >= DISTANCE_3QUARTERS && brakePDL_dist < DISTANCE_HALF){
+				RPM -= RPM/50;
+				if(RPM < 5000){
+					if(gear > 1){
+						RPM = 10000;
+						gear--;
+						
+					}
+					else{
+						RPM = 5000;
+					}
+				}
+			}
+			else if(brakePDL_dist >= DISTANCE_HALF && brakePDL_dist < DISTANCE_QUARTER){
 				RPM -= RPM/75;
 				if(RPM < 5000){
-					RPM = 5000;
 					if(gear > 1){
+						RPM = 10000;
 						gear--;
-						RPM = 12000;
+						
+					}
+					else{
+						RPM = 5000;
 					}
 				}
 			}
-			else if(distance_1 >=11){
+			else if(brakePDL_dist >= DISTANCE_QUARTER && brakePDL_dist < DISTANCE_RESTING){
+				RPM -= RPM/85;
+				if(RPM < 5000){
+					if(gear > 1){
+						RPM = 10000;
+						gear--;
+						
+					}
+					else{
+						RPM = 5000;
+					}
+				}
 			}
 			
 			printf("%i", RPM);
@@ -1103,10 +420,7 @@ int main(void) {
 				else if(gear == 8){
 					Draw(matrixData_8X8_8_4);
 				}
-			}				
+			}	
 		}
 	}
-	
-	
-	
 }
