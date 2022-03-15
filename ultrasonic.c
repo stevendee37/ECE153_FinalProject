@@ -108,8 +108,6 @@ void Input_Capture_Setup() {
 }
 
 void Trigger_Setup() {
-	// [TODO]
-	
 	// Set up PA9
 		// Enable clock for GPIO Port A
 	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOAEN;
@@ -150,7 +148,7 @@ void Trigger_Setup() {
 	
 	RCC->APB1ENR1 |= RCC_APB1ENR1_TIM5EN;
 	
-	// Set prescaler to 15
+	// Set prescaler to 0x4F
 	TIM1->PSC &= ~TIM_PSC_PSC;
 	TIM1->PSC |= 0x4F;
 	
@@ -165,7 +163,8 @@ void Trigger_Setup() {
 	// Set auto reload value to its maximal value
 	TIM1->ARR |= TIM_ARR_ARR;
 	
-	TIM5->ARR |= TIM_ARR_ARR;
+	TIM5->ARR &= ~TIM_ARR_ARR;
+	TIM5->ARR |= 0xFFFF;
 	
 	// Set CCR value that will trigger the sensor
 	TIM1->CCR2 = 0xA; // 26.4.14

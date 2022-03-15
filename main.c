@@ -80,7 +80,6 @@ void TIM2_IRQHandler(void) {
 		if(input_1 == 1){
 			currentValue_1 = TIM2->CCR1;
 		}
-	
 		// On falling edge:
 		else if(input_1 == 0){
 			lastValue_1 = currentValue_1;
@@ -160,7 +159,9 @@ int main(void) {
 			}
 			else if (i == 1){
 				if(throttlePDL_dist <= DISTANCE_RESTING){
-					gear++;
+					if(gear < 8){
+						gear++;
+					}
 					if(RPM > 7000){
 						RPM = RPM - 2000;
 						}
@@ -179,13 +180,13 @@ int main(void) {
 			////////// RPM behavior based on pedal input //////////
 			if(brakePDL_dist >= DISTANCE_RESTING){
 				if(throttlePDL_dist < DISTANCE_FULL){
-					RPM += 300;
+					RPM += 100;
 					if(RPM > MAX_RPM){
 						RPM = MAX_RPM;
 					}
 				}
 				else if(throttlePDL_dist >= DISTANCE_FULL && throttlePDL_dist < DISTANCE_3QUARTERS){
-					RPM += 100;
+					RPM += 90;
 					if(RPM > 11125){
 						RPM = 11125;
 					}
